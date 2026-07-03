@@ -1,0 +1,672 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FreshCart - Sri Lankan Vegetable Store Management System</title>
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <!-- Firebase Compat SDKs (version 10.8.0) -->
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-database-compat.js"></script>
+  <!-- Stylesheet -->
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <!-- LOGIN OVERLAY PORTAL -->
+  <div class="login-overlay active" id="login-overlay">
+    <div class="login-card">
+      <div class="login-header">
+        <div class="login-logo">
+          <i data-lucide="leaf"></i>
+        </div>
+        <h2>FreshCart Store Manager</h2>
+        <p>Sign in to manage inventory, POS billing, and sales analytics</p>
+      </div>
+
+      <!-- Mode 1: Credentials Login -->
+      <form id="login-form">
+        <div class="form-group">
+          <label for="login-username">Username</label>
+          <input type="text" id="login-username" required placeholder="Enter username">
+        </div>
+        <div class="form-group">
+          <label for="login-password">Password</label>
+          <input type="password" id="login-password" required placeholder="Enter password">
+        </div>
+        <div id="login-error-msg" class="auth-error-msg"></div>
+        <button type="submit" class="btn btn-primary btn-block">Sign In</button>
+        <div class="forgot-pwd-link-container">
+          <a href="#" id="btn-goto-forgot">Forgot Password?</a>
+        </div>
+      </form>
+
+      <!-- Mode 2: Forgot Password Reset Recovery -->
+      <form id="recovery-form" style="display: none;">
+        <div class="form-group">
+          <label for="recovery-pin">Secret Reset PIN (4 Digits)</label>
+          <input type="password" id="recovery-pin" maxlength="4" required placeholder="e.g. 1234">
+        </div>
+        <div class="form-group">
+          <label for="recovery-role">Select Account to Reset</label>
+          <select id="recovery-role" required>
+            <option value="admin">Admin Account</option>
+            <option value="cashier">Cashier/User Account</option>
+          </select>
+        </div>
+        <div class="form-grid">
+          <div class="form-group">
+            <label for="recovery-new-user">New Username</label>
+            <input type="text" id="recovery-new-user" required placeholder="New username">
+          </div>
+          <div class="form-group">
+            <label for="recovery-new-pass">New Password</label>
+            <input type="password" id="recovery-new-pass" required placeholder="New password">
+          </div>
+        </div>
+        <div id="recovery-error-msg" class="auth-error-msg"></div>
+        <div id="recovery-success-msg" class="auth-success-msg"></div>
+        <button type="submit" class="btn btn-primary btn-block">Reset Credentials</button>
+        <div class="forgot-pwd-link-container">
+          <a href="#" id="btn-goto-login">Back to Sign In</a>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div class="app-container">
+    <!-- Sidebar Navigation -->
+    <aside class="sidebar">
+      <div class="sidebar-brand">
+        <div class="brand-logo">
+          <i data-lucide="leaf"></i>
+        </div>
+        <div class="brand-name">
+          <h1 id="sidebar-shop-name">FreshCart</h1>
+          <span>Store Manager</span>
+        </div>
+      </div>
+      
+      <nav class="sidebar-nav">
+        <a href="#" class="nav-item active" data-view="dashboard" id="nav-dashboard">
+          <i data-lucide="layout-dashboard"></i>
+          <span>Dashboard</span>
+        </a>
+        <a href="#" class="nav-item" data-view="pos" id="nav-pos">
+          <i data-lucide="shopping-cart"></i>
+          <span>Point of Sale</span>
+        </a>
+        <a href="#" class="nav-item" data-view="inventory" id="nav-inventory">
+          <i data-lucide="package"></i>
+          <span>Inventory</span>
+        </a>
+        <a href="#" class="nav-item" data-view="settings" id="nav-settings">
+          <i data-lucide="settings"></i>
+          <span>Settings</span>
+        </a>
+      </nav>
+
+      <div class="sidebar-footer">
+        <div class="store-status">
+          <span class="status-indicator online" id="sidebar-status-dot"></span>
+          <span class="status-text" id="sidebar-status-text">Local Offline</span>
+        </div>
+        <div class="user-role-badge">
+          <i data-lucide="user"></i>
+          <span id="sidebar-role-label">Guest</span>
+        </div>
+        <a href="#" class="btn-logout" id="btn-logout" title="Log Out">
+          <i data-lucide="log-out"></i> Logout
+        </a>
+      </div>
+    </aside>
+
+    <!-- Main Content Area -->
+    <main class="main-content">
+      <!-- Top Header -->
+      <header class="app-header">
+        <div class="header-title">
+          <h2 id="view-title">Dashboard</h2>
+          <p id="view-subtitle" class="text-muted">Welcome back, manager! Here is today's overview.</p>
+        </div>
+        <div class="header-actions">
+          <div class="date-time-display">
+            <i data-lucide="calendar"></i>
+            <input type="date" id="dashboard-date-picker" class="header-date-picker">
+          </div>
+        </div>
+      </header>
+
+      <!-- VIEW: Dashboard -->
+      <section id="view-dashboard" class="content-view active">
+        <!-- Stats Grid -->
+        <div class="stats-grid">
+          <div class="stat-card">
+            <div class="stat-icon rev-icon">
+              <i data-lucide="wallet"></i>
+            </div>
+            <div class="stat-data">
+              <span class="stat-label" id="label-revenue">Revenue (Selected Date)</span>
+              <h3 id="stat-revenue">Rs. 0.00</h3>
+            </div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-icon sales-icon">
+              <i data-lucide="shopping-bag"></i>
+            </div>
+            <div class="stat-data">
+              <span class="stat-label" id="label-sales-count">Sales (Selected Date)</span>
+              <h3 id="stat-sales-count">0</h3>
+            </div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-icon stock-icon">
+              <i data-lucide="scale"></i>
+            </div>
+            <div class="stat-data">
+              <span class="stat-label">Total Stock (Live)</span>
+              <h3 id="stat-stock-weight">0.0 kg</h3>
+            </div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-icon alert-icon">
+              <i data-lucide="alert-triangle"></i>
+            </div>
+            <div class="stat-data">
+              <span class="stat-label">Low Stock Alerts</span>
+              <h3 id="stat-low-stock-count">0</h3>
+            </div>
+          </div>
+        </div>
+
+        <!-- Dashboard Layout Grid -->
+        <div class="dashboard-layout">
+          <!-- Left Column: Sales Chart -->
+          <div class="card chart-card">
+            <div class="card-header">
+              <div>
+                <h4 class="card-title" id="chart-card-title">Weekly Sales Trend (Rs.)</h4>
+                <p class="card-subtitle" id="chart-card-subtitle">Daily revenue summary for the last 7 days</p>
+              </div>
+              <div class="card-header-actions">
+                <select id="chart-range-select" class="chart-range-select">
+                  <option value="today">Today (Hourly)</option>
+                  <option value="7days" selected>Last 7 Days</option>
+                  <option value="30days">Last 30 Days</option>
+                </select>
+              </div>
+            </div>
+            <div class="card-body chart-container" id="chart-container">
+              <!-- SVG chart will be dynamically rendered here by app.js -->
+            </div>
+          </div>
+
+          <!-- Right Column: Low Stock Panel -->
+          <div class="card low-stock-card">
+            <div class="card-header">
+              <div>
+                <h4 class="card-title">Low Stock Alert</h4>
+                <p class="card-subtitle">Items that require restocking soon</p>
+              </div>
+            </div>
+            <div class="card-body">
+              <div class="alert-list" id="low-stock-list">
+                <!-- Low stock list items will go here -->
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Recent Transactions Section -->
+        <div class="card transactions-card">
+          <div class="card-header">
+            <div>
+              <h4 class="card-title" id="tx-card-title">Transactions (Selected Date)</h4>
+              <p class="card-subtitle">Reprint invoices or refund sales to return stock back to inventory</p>
+            </div>
+            <div class="card-header-actions">
+              <div class="search-bar search-bar-sm">
+                <i data-lucide="search"></i>
+                <input type="text" id="tx-search-input" placeholder="Search by Invoice ID (e.g. 1012)...">
+              </div>
+            </div>
+          </div>
+          <div class="card-body p-0">
+            <div class="table-responsive">
+              <table class="table">
+                <thead>
+                  <tr>
+                    <th>Invoice ID</th>
+                    <th>Time / Date</th>
+                    <th>Items Purchased</th>
+                    <th>Subtotal</th>
+                    <th>Discount</th>
+                    <th>Total Pay</th>
+                    <th class="text-right role-admin-only">Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="recent-transactions-tbody">
+                  <!-- Dynamic rows go here -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- VIEW: POS (Point of Sale) -->
+      <section id="view-pos" class="content-view">
+        
+        <!-- POS TOP BAR: Quick Add Autocomplete Form -->
+        <div class="pos-billing-header card">
+          <div class="card-body">
+            <form id="pos-quick-add-form" autocomplete="off">
+              <div class="quick-add-grid">
+                
+                <!-- Autocomplete Dropdown Search -->
+                <div class="form-group dropdown-container">
+                  <label for="pos-product-search">Vegetable Name / Code</label>
+                  <div class="autocomplete-wrapper">
+                    <i data-lucide="search" class="search-icon"></i>
+                    <input type="text" id="pos-product-search" placeholder="Type name (e.g. Carrot, Spinach, Potato)..." required>
+                    <input type="hidden" id="pos-selected-product-id">
+                    <button type="button" class="btn-clear-search" id="btn-clear-search-input">&times;</button>
+                  </div>
+                  <div class="dropdown-suggestions" id="pos-dropdown-suggestions">
+                    <!-- Suggestions rendered by JS -->
+                  </div>
+                </div>
+
+                <!-- Billing Method Selection -->
+                <div class="form-group method-select-group">
+                  <label for="pos-sell-method">Billing Method</label>
+                  <select id="pos-sell-method" required>
+                    <option value="weight">By Weight (kg)</option>
+                    <option value="amount">By Amount (Rs.)</option>
+                    <option value="count">By Count (pcs)</option>
+                  </select>
+                </div>
+
+                <!-- Value / Quantity / Weight textbox -->
+                <div class="form-group weight-input-group">
+                  <label for="pos-weight-input" id="pos-input-label">Weight Purchased</label>
+                  <div class="input-unit-wrapper">
+                    <input type="number" id="pos-weight-input" min="0.01" step="0.01" value="1.00" required placeholder="e.g. 0.25">
+                    <span class="input-unit" id="pos-weight-unit">kg</span>
+                  </div>
+                </div>
+
+                <!-- Add Button -->
+                <div class="add-button-group">
+                  <button type="submit" class="btn btn-primary btn-add-item" id="btn-add-to-bill">
+                    <i data-lucide="plus"></i> Add
+                  </button>
+                </div>
+                
+              </div>
+            </form>
+          </div>
+        </div>
+
+        <div class="pos-layout">
+          <!-- Left Panel: Active Bill Table -->
+          <div class="pos-bill-table-container card">
+            <div class="card-header">
+              <div class="cart-title">
+                <i data-lucide="receipt"></i>
+                <h4>Active Bill Items</h4>
+              </div>
+              <button class="btn btn-outline btn-sm btn-clear-cart" id="btn-clear-cart">Clear All Items</button>
+            </div>
+            <div class="card-body p-0" id="pos-bill-body">
+              <div class="table-responsive">
+                <table class="table" id="pos-bill-table">
+                  <thead>
+                    <tr>
+                      <th>Product</th>
+                      <th>Category</th>
+                      <th class="text-right">Price / Unit</th>
+                      <th class="text-right">Quantity</th>
+                      <th class="text-right">Total</th>
+                      <th class="text-right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody id="pos-bill-tbody">
+                    <!-- Dynamic billing items table -->
+                  </tbody>
+                </table>
+              </div>
+              <div class="empty-cart-state" id="pos-empty-cart-state">
+                <i data-lucide="shopping-basket"></i>
+                <p>No items added to the bill yet</p>
+                <span>Search and add vegetables using the form above</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Right Panel: Checkout summary -->
+          <div class="pos-cart-panel card">
+            <div class="cart-header">
+              <div class="cart-title">
+                <i data-lucide="credit-card"></i>
+                <h4>Payment Summary</h4>
+              </div>
+            </div>
+            <div class="cart-body">
+              <div class="summary-row">
+                <span>Subtotal</span>
+                <span id="summary-subtotal">Rs. 0.00</span>
+              </div>
+              <div class="summary-row">
+                <span>Discount</span>
+                <div class="discount-input-wrapper">
+                  <input type="number" id="discount-percent-input" min="0" max="100" value="0">%
+                </div>
+              </div>
+              <div class="summary-row">
+                <span>Tax</span>
+                <span id="summary-tax">Rs. 0.00</span>
+              </div>
+              <div class="summary-row total-row">
+                <span>Total Pay</span>
+                <span id="summary-total">Rs. 0.00</span>
+              </div>
+              <button class="btn btn-primary btn-block btn-checkout" id="btn-checkout" disabled>
+                Complete Checkout
+              </button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- VIEW: Inventory -->
+      <section id="view-inventory" class="content-view">
+        <div class="inventory-controls">
+          <div class="search-bar">
+            <i data-lucide="search"></i>
+            <input type="text" id="inventory-search-input" placeholder="Search inventory...">
+          </div>
+          <button class="btn btn-primary" id="btn-add-product">
+            <i data-lucide="plus"></i> Add Product
+          </button>
+        </div>
+
+        <div class="card table-card">
+          <div class="card-body p-0">
+            <div class="table-responsive">
+              <table class="table">
+                <thead>
+                  <tr>
+                    <th>Product</th>
+                    <th>Category</th>
+                    <th>Price / kg</th>
+                    <th>Current Stock</th>
+                    <th>Status</th>
+                    <th class="text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="inventory-table-tbody">
+                  <!-- Dynamic inventory table row will go here -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- VIEW: Settings -->
+      <section id="view-settings" class="content-view">
+        <div class="settings-views-wrapper">
+          
+          <!-- Box 1: Shop Profile Details -->
+          <div class="card settings-card">
+            <div class="card-header">
+              <div>
+                <h4 class="card-title">Shop Profile Settings</h4>
+                <p class="card-subtitle">Manage store information and billing parameters</p>
+              </div>
+            </div>
+            <div class="card-body">
+              <form id="settings-form">
+                <div class="form-group">
+                  <label for="settings-shop-name">Shop Name *</label>
+                  <input type="text" id="settings-shop-name" required placeholder="e.g. FRESHCART MARKET">
+                </div>
+
+                <div class="form-grid">
+                  <div class="form-group">
+                    <label for="settings-shop-phone">Contact Phone Number *</label>
+                    <input type="text" id="settings-shop-phone" required placeholder="e.g. (011) 2345-6789">
+                  </div>
+
+                  <div class="form-group">
+                    <label for="settings-tax-rate">Sales Tax Rate (%) *</label>
+                    <input type="number" id="settings-tax-rate" min="0" max="100" step="0.1" required placeholder="e.g. 5.0">
+                  </div>
+                </div>
+
+                <div class="form-group">
+                  <label for="settings-shop-address">Shop Address *</label>
+                  <input type="text" id="settings-shop-address" required placeholder="e.g. 123 Eco-Drive, Colombo 03">
+                </div>
+
+                <div class="form-group">
+                  <label for="settings-receipt-greeting">Receipt Invoice Footer Message *</label>
+                  <input type="text" id="settings-receipt-greeting" required placeholder="e.g. Thank You For Shopping Fresh! Please Come Again">
+                </div>
+
+                <div style="padding-top: 1rem; border-top: 1px solid var(--border); display: flex; justify-content: flex-end;">
+                  <button type="submit" class="btn btn-primary">
+                    <i data-lucide="save"></i> Save Profile Settings
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+
+          <!-- Box 2: Auth Credentials & Reset PIN -->
+          <div class="card settings-card">
+            <div class="card-header">
+              <div>
+                <h4 class="card-title">User Credentials & Security Reset PIN</h4>
+                <p class="card-subtitle">Configure Admin and Cashier login details and reset codes</p>
+              </div>
+            </div>
+            <div class="card-body">
+              <form id="settings-auth-form">
+                
+                <h5 class="settings-section-title">Admin Account Credentials</h5>
+                <div class="form-grid">
+                  <div class="form-group">
+                    <label for="settings-admin-user">Admin Username *</label>
+                    <input type="text" id="settings-admin-user" required placeholder="admin">
+                  </div>
+                  <div class="form-group">
+                    <label for="settings-admin-pass">Admin Password *</label>
+                    <input type="password" id="settings-admin-pass" required placeholder="••••••••">
+                  </div>
+                </div>
+
+                <h5 class="settings-section-title" style="margin-top: 1.5rem;">Cashier/User Account Credentials</h5>
+                <div class="form-grid">
+                  <div class="form-group">
+                    <label for="settings-cashier-user">Cashier Username *</label>
+                    <input type="text" id="settings-cashier-user" required placeholder="cashier">
+                  </div>
+                  <div class="form-group">
+                    <label for="settings-cashier-pass">Cashier Password *</label>
+                    <input type="password" id="settings-cashier-pass" required placeholder="••••••••">
+                  </div>
+                </div>
+
+                <h5 class="settings-section-title" style="margin-top: 1.5rem;">Security Password Recovery PIN</h5>
+                <div class="form-group" style="max-width: 300px;">
+                  <label for="settings-recovery-pin">Secret Reset PIN (4 Digits) *</label>
+                  <input type="password" id="settings-recovery-pin" maxlength="4" required placeholder="1234">
+                  <span class="form-tip">Used to unlock and reset accounts if you forget passwords.</span>
+                </div>
+
+                <div style="padding-top: 1rem; border-top: 1px solid var(--border); display: flex; justify-content: flex-end;">
+                  <button type="submit" class="btn btn-primary" id="btn-save-auth-settings">
+                    <i data-lucide="key-round"></i> Save Credentials
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+
+          <!-- Box 3: Firebase Central Database Sync (To share database across links) -->
+          <div class="card settings-card" style="margin-bottom: 2rem;">
+            <div class="card-header">
+              <div>
+                <h4 class="card-title">Firebase Cloud Synchronization</h4>
+                <p class="card-subtitle">Pasting keys below syncs settings, inventory, and logins between all users instantly</p>
+              </div>
+            </div>
+            <div class="card-body">
+              <form id="settings-firebase-form">
+                <div class="form-group" style="margin-bottom: 1.25rem;">
+                  <div style="display: flex; align-items: center; gap: 0.5rem;">
+                    <input type="checkbox" id="settings-firebase-enable" style="width: auto; height: auto; transform: scale(1.15);">
+                    <label for="settings-firebase-enable" style="margin: 0; font-weight: 600; cursor: pointer;">Enable Firebase Central Cloud Sync</label>
+                  </div>
+                  <span class="form-tip" style="margin-top: 0.25rem; display: block;">If disabled, the system runs locally using offline storage.</span>
+                </div>
+
+                <div id="firebase-inputs-block">
+                  <div class="form-grid">
+                    <div class="form-group">
+                      <label for="settings-fb-apikey">Firebase API Key</label>
+                      <input type="text" id="settings-fb-apikey" placeholder="AIzaSy...">
+                    </div>
+                    <div class="form-group">
+                      <label for="settings-fb-dburl">Realtime Database URL</label>
+                      <input type="text" id="settings-fb-dburl" placeholder="https://[project-name]-default-rtdb.firebaseio.com">
+                    </div>
+                  </div>
+                  <div class="form-grid">
+                    <div class="form-group">
+                      <label for="settings-fb-projectid">Project ID</label>
+                      <input type="text" id="settings-fb-projectid" placeholder="my-veg-store">
+                    </div>
+                    <div class="form-group">
+                      <label for="settings-fb-appid">App ID</label>
+                      <input type="text" id="settings-fb-appid" placeholder="1:12345:web:abcd...">
+                    </div>
+                  </div>
+                </div>
+
+                <div style="padding-top: 1rem; border-top: 1px solid var(--border); display: flex; justify-content: flex-end;">
+                  <button type="submit" class="btn btn-primary" id="btn-save-firebase-settings">
+                    <i data-lucide="cloud-lightning"></i> Enable & Connect Database
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <!-- MODAL: Add / Edit Product -->
+  <div class="modal-overlay" id="product-modal">
+    <div class="modal">
+      <div class="modal-header">
+        <h3 id="product-modal-title">Add New Product</h3>
+        <button class="btn-close-modal" id="btn-close-product-modal">&times;</button>
+      </div>
+      <div class="modal-body">
+        <form id="product-form">
+          <input type="hidden" id="product-id">
+          
+          <div class="form-group">
+            <label for="product-name">Product Name *</label>
+            <input type="text" id="product-name" required placeholder="e.g. Fresh Carrot">
+          </div>
+
+          <div class="form-grid">
+            <div class="form-group">
+              <label for="product-category">Category *</label>
+              <select id="product-category" required>
+                <option value="Leafy Green">Leafy Green</option>
+                <option value="Root">Root</option>
+                <option value="Fruit Vegetable">Fruit Vegetable</option>
+                <option value="Cruciferous">Cruciferous</option>
+                <option value="Herb">Herb</option>
+                <option value="Other">Other</option>
+              </select>
+            </div>
+            
+            <div class="form-group">
+              <label for="product-unit">Pricing Unit *</label>
+              <select id="product-unit" required>
+                <option value="kg">Per Kilogram (kg)</option>
+                <option value="piece">Per Piece (pcs)</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="form-grid">
+            <div class="form-group">
+              <label for="product-emoji">Icon (Emoji) *</label>
+              <input type="text" id="product-emoji" required placeholder="🥕" maxlength="5">
+            </div>
+
+            <div class="form-group">
+              <label for="product-price">Price per unit (Rs.) *</label>
+              <input type="number" id="product-price" required min="1" step="0.5" placeholder="e.g. 250">
+            </div>
+          </div>
+
+          <div class="form-grid">
+            <div class="form-group">
+              <label for="product-stock">Initial Stock *</label>
+              <input type="number" id="product-stock" required min="0" step="0.1" placeholder="e.g. 50">
+            </div>
+
+            <div class="form-group">
+              <label for="product-alert">Low Stock Alert Threshold *</label>
+              <input type="number" id="product-alert" required min="1" value="10" placeholder="e.g. 10">
+            </div>
+          </div>
+
+          <div class="modal-footer">
+            <button type="button" class="btn btn-outline" id="btn-cancel-product">Cancel</button>
+            <button type="submit" class="btn btn-primary" id="btn-save-product">Save Product</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: Receipt / Checkout Success -->
+  <div class="modal-overlay" id="receipt-modal">
+    <div class="modal modal-sm">
+      <div class="modal-header">
+        <h3>Transaction Invoice</h3>
+        <button class="btn-close-modal" id="btn-close-receipt-modal">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="receipt-print-area" id="receipt-print-area">
+          <!-- Dynamic Receipt Content will go here -->
+        </div>
+        <div class="modal-footer print-actions">
+          <button type="button" class="btn btn-outline" id="btn-close-receipt">Close</button>
+          <button type="button" class="btn btn-primary" id="btn-print-receipt">
+            <i data-lucide="printer"></i> Print Receipt
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Core Javascript -->
+  <script src="app.js"></script>
+</body>
+</html>
