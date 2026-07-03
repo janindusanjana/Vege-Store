@@ -359,6 +359,21 @@ function initDOM() {
   dom.settingsFbProjectId = document.getElementById("settings-fb-projectid");
   dom.settingsFbAppId = document.getElementById("settings-fb-appid");
 
+  // Database Management & Maintenance
+  dom.btnOpenBackupModal = document.getElementById("btn-open-backup-modal");
+  dom.backupModal = document.getElementById("backup-modal");
+  dom.databaseBackupJson = document.getElementById("database-backup-json");
+  dom.btnCloseBackupModal = document.getElementById("btn-close-backup-modal");
+  dom.btnCloseBackup = document.getElementById("btn-close-backup");
+  dom.btnCopyBackup = document.getElementById("btn-copy-backup");
+  dom.settingsDbPruneForm = document.getElementById("settings-db-prune-form");
+  dom.settingsPruneType = document.getElementById("settings-prune-type");
+  dom.settingsPruneDateGroup = document.getElementById("settings-prune-date-group");
+  dom.settingsPruneDate = document.getElementById("settings-prune-date");
+  dom.btnResetStock = document.getElementById("btn-reset-stock");
+  dom.btnRestoreSeeds = document.getElementById("btn-restore-seeds");
+  dom.btnFactoryReset = document.getElementById("btn-factory-reset");
+
   // Receipt Modal
   dom.receiptModal = document.getElementById("receipt-modal");
   dom.receiptPrintArea = document.getElementById("receipt-print-area");
@@ -469,6 +484,17 @@ function initDOM() {
   dom.btnCloseReceiptModal.addEventListener("click", closeReceiptModal);
   dom.btnCloseReceipt.addEventListener("click", closeReceiptModal);
   dom.btnSaveReceipt.addEventListener("click", () => window.print());
+
+  // Database Management Actions
+  dom.btnOpenBackupModal.addEventListener("click", openBackupModal);
+  dom.btnCloseBackupModal.addEventListener("click", closeBackupModal);
+  dom.btnCloseBackup.addEventListener("click", closeBackupModal);
+  dom.btnCopyBackup.addEventListener("click", copyBackupToClipboard);
+  dom.settingsPruneType.addEventListener("change", handlePruneTypeChange);
+  dom.settingsDbPruneForm.addEventListener("submit", handleDbPruneSubmit);
+  dom.btnResetStock.addEventListener("click", handleResetStockClick);
+  dom.btnRestoreSeeds.addEventListener("click", handleRestoreSeedsClick);
+  dom.btnFactoryReset.addEventListener("click", handleFactoryResetClick);
 }
 
 // -------------------------------------------------------------
@@ -1719,6 +1745,183 @@ function handleFirebaseSettingsSubmit(e) {
     alert("Error saving settings: " + err.message);
     console.error("Firebase submit error: ", err);
   }
+}
+
+// --- DATABASE MAINTENANCE HANDLERS (ADMIN ONLY) ---
+function openBackupModal() {
+  try {
+    const backup = {
+      inventory: AppState.inventory,
+      transactions: AppState.transactions,
+      settings: AppState.settings,
+      auth: AppState.auth
+    };
+    dom.databaseBackupJson.value = JSON.stringify(backup, null, 2);
+    dom.backupModal.classList.add("active");
+  } catch (err) {
+    alert("Error generating backup: " + err.message);
+  }
+}
+
+function closeBackupModal() {
+  dom.backupModal.classList.remove("active");
+}
+
+function copyBackupToClipboard() {
+  try {
+    dom.databaseBackupJson.select();
+    document.execCommand("copy");
+    alert("Database backup JSON copied to clipboard successfully!");
+  } catch (err) {
+    alert("Could not copy backup: " + err.message);
+  }
+}
+
+function handlePruneTypeChange() {
+  const type = dom.settingsPruneType.value;
+  dom.settingsPruneDateGroup.style.display = (type === "date" ? "block" : "none");
+  if (type === "date") {
+    dom.settingsPruneDate.required = true;
+    dom.settingsPruneDate.value = getLocalDateString();
+  } else {
+    dom.settingsPruneDate.required = false;
+  }
+}
+
+function handleDbPruneSubmit(e) {
+  try {
+    e.preventDefault();
+    const type = dom.settingsPruneType.value;
+    
+    let confirmMsg = "Are you sure you want to delete these transaction logs?";
+    if (type === "7days") confirmMsg = "Are you sure you want to permanently delete all transactions older than 7 days?";
+    else if (type === "30days") confirmMsg = "Are you sure you want to permanently delete all transactions older than 30 days?";
+    else if (type === "date") {
+      const dateVal = dom.settingsPruneDate.value;
+      if (!dateVal) {
+        alert("Please select a valid date for pruning.");
+        return;
+      }
+      confirmMsg = `Are you sure you want to permanently delete all transactions logged on ${dateVal}?`;
+    } else if (type === "all") {
+      confirmMsg = "⚠️ WARNING: Are you sure you want to permanently delete ALL sales transactions in history? This cannot be undone.";
+    }
+
+    if (!confirm(confirmMsg)) return;
+
+    let originalCount = AppState.transactions.length;
+    let prunedList = [];
+
+    if (type === "7days") {
+      const cutoff = new Date();
+      cutoff.setDate(cutoff.getDate() - 7);
+      prunedList = AppState.transactions.filter(tx => new Date(tx.timestamp) >= cutoff);
+    } else if (type === "30days") {
+      const cutoff = new Date();
+      cutoff.setDate(cutoff.getDate() - 30);
+      prunedList = AppState.transactions.filter(tx => new Date(tx.timestamp) >= cutoff);
+    } else if (type === "date") {
+      const dateVal = dom.settingsPruneDate.value; // YYYY-MM-DD
+      prunedList = AppState.transactions.filter(tx => {
+        const txDateStr = tx.timestamp.split("T")[0];
+        return txDateStr !== dateVal;
+      });
+    } else if (type === "all") {
+      prunedList = [];
+    }
+
+    AppState.transactions = prunedList;
+    StoreDatabase.saveTransactions(AppState.transactions);
+
+    const deletedCount = originalCount - prunedList.length;
+    alert(`Prune complete. Successfully removed ${deletedCount} transaction logs.`);
+    
+    if (AppState.currentView === "dashboard") {
+      renderDashboard();
+    }
+  } catch (err) {
+    alert("Pruning failed: " + err.message);
+  }
+}
+
+function handleResetStockClick() {
+  try {
+    if (!confirm("Are you sure you want to reset current stock levels of ALL vegetable items in the ledger to 0.00 kg? This action cannot be undone.")) {
+      return;
+    }
+    
+    AppState.inventory.forEach(item => {
+      item.stock = 0.0;
+    });
+
+    StoreDatabase.saveInventory(AppState.inventory);
+    alert("All stock quantities have been reset to 0.00 kg.");
+    
+    if (AppState.currentView === "inventory") {
+      renderInventoryTable();
+    } else if (AppState.currentView === "dashboard") {
+      renderDashboard();
+    }
+  } catch (err) {
+    alert("Stock reset failed: " + err.message);
+  }
+}
+
+function handleRestoreSeedsClick() {
+  try {
+    if (!confirm("Are you sure you want to restore the default seed vegetable inventory? This will overwrite your current product ledger list.")) {
+      return;
+    }
+
+    // Load defaults
+    AppState.inventory = JSON.parse(JSON.stringify(DEFAULT_VEGETABLES));
+    StoreDatabase.saveInventory(AppState.inventory);
+    alert("Default seed vegetable inventory has been successfully restored.");
+
+    if (AppState.currentView === "inventory") {
+      renderInventoryTable();
+    } else if (AppState.currentView === "dashboard") {
+      renderDashboard();
+    }
+  } catch (err) {
+    alert("Failed to restore default seeds: " + err.message);
+  }
+}
+
+function handleFactoryResetClick() {
+  try {
+    const doubleConfirm = confirm("⚠️ EXTREME WARNING: You are about to perform a Factory Reset.\n\nThis will completely wipe all local configuration settings, auth account credentials, inventory ledger counts, and transactional logs. If cloud sync is active, it will also wipe the Firebase Realtime Database node.\n\nAre you sure you want to proceed?");
+    
+    if (!doubleConfirm) return;
+
+    const confirmationWord = prompt("Please type 'RESET' in uppercase to confirm full system factory wipe:");
+    if (confirmationWord !== "RESET") {
+      alert("Factory reset cancelled. Confirmation word did not match.");
+      return;
+    }
+
+    alert("Initiating factory system wipe. Wiping databases...");
+
+    // Clean Firebase if active
+    if (AppState.firebaseSyncActive && database) {
+      database.ref().remove()
+        .then(() => performLocalWipe())
+        .catch(err => {
+          console.error("Firebase wipe failed, performing local wipe anyway: ", err);
+          performLocalWipe();
+        });
+    } else {
+      performLocalWipe();
+    }
+  } catch (err) {
+    alert("Factory reset encountered an error: " + err.message);
+  }
+}
+
+function performLocalWipe() {
+  localStorage.clear();
+  alert("All local database records wiped! System will now refresh and restore starting seeds.");
+  window.location.reload();
 }
 
 // -------------------------------------------------------------
